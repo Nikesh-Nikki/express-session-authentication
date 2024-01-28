@@ -1,6 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import pg from "pg";
+import bcrypt from "bcrypt";
 
 const db=new pg.Client({
   host : "localhost",
@@ -35,18 +36,22 @@ app.post("/register", async (req, res) => {
   console.log(req.body.password);
   const username=req.body.username;
   const password=req.body.password;
-  const result=await db.query("select * from users where username=$1",[username]);
+  const result=await db.query("select * from usersH where username=$1",[username]);
   const data=result.rows;
   console.log(data);
   if(data.length>0){
     res.send("username exists try loggin in");
   }else{
+    console.log("adding");
     try{
-      await db.query("insert into users (username,password) values($1,$2)",[username,password]);
+      let hash=await bcrypt.hash(password,1);
+      console.log(hash);
+      await db.query("insert into usersH (username,password_hash) values($1,$2)",[username,hash]);
+      res.render("secrets.ejs");
     }catch(err){
-      res.redirect("/");
+      // res.redirect("/");
+      console.log(err);
     }
-    res.render("secrets.ejs");
   }
 });
 
@@ -56,12 +61,12 @@ app.post("/login", async (req, res) => {
   const username=req.body.username;
   const enteredPassword=req.body.password;
   try{
-    const result=await db.query("Select password from users where username=$1",[username]);
+    const result=await db.query("Select password_hash from usersH where username=$1",[username]);
     const data=result.rows;
-    const password=data[0].password;
-    console.log(password);
+    const passwordHash=data[0].password_hash;
     console.log(enteredPassword);
-    if(password==enteredPassword) res.render("secrets.ejs");
+    let compare=await bcrypt.compare(enteredPassword,passwordHash);
+    if(compare) res.render("secrets.ejs");
     else res.redirect("/");
   }catch(err){
     console.log(err);
