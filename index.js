@@ -6,13 +6,17 @@ import pgconnect from "connect-pg-simple";
 import passport from "passport";
 import Stratergy from "passport-local";
 import bcrypt from "bcrypt";
+import env from "dotenv";
+import GitHubStrategy from "passport-github";
+
+env.config();
 
 const pgSession=pgconnect(session);
-const pool = new pg.Pool(
+const pgPool = new pg.Pool(
   {
     host: 'localhost',
     user: 'postgres',
-    password : 'Nikesh@123',
+    password : process.env.pgPassword,
     database : "secrets",
     port : 5432,
     max: 20,
@@ -24,7 +28,7 @@ const pool = new pg.Pool(
   const db=new pg.Client({
     host : "localhost",
     user : "postgres",
-    password : "Nikesh@123",
+    password : process.env.pgPassword,
     database : "secrets",
     port : 5432,
   });
@@ -33,7 +37,7 @@ const pool = new pg.Pool(
 const stratergy = new Stratergy(
   async function(username,password,done){
     try{
-      const results=await pool.query("select * from usersh where username=$1",[username]);
+      const results=await pgPool.query("select * from usersh where username=$1",[username]);
       const user=results.rows[0];
       if(results.rows.length===0) return done(null,false);
       if(await bcrypt.compare(password,user.password_hash)){
@@ -52,7 +56,7 @@ const port = 3000;
 
 app.use(session({
   store: new pgSession({
-    pool : pool,                // Connection pool
+    pool : pgPool,                // Connection pgPool
     createTableIfMissing : true,
     tableName : 'user_sessions'   // Use another table-name than the default "session" one
     // Insert connect-pg-simple options here
@@ -82,13 +86,10 @@ app.get("/register", (req, res) => {
 });
 
 app.post("/register", async (req, res) => {
-  // console.log(req.body.username);
-  // console.log(req.body.password);
   const username=req.body.username;
   const password=req.body.password;
   const result=await db.query("select * from usersH where username=$1",[username]);
   const data=result.rows;
-  // console.log(data);
   if(data.length>0){
     res.send("username exists try loggin in");
   }else{
@@ -96,10 +97,8 @@ app.post("/register", async (req, res) => {
     try{
       await db.query("insert into usersh (username,password_hash) values($1,$2)",[username,await bcrypt.hash(password,1)]);
     }catch(err){
-      // res.redirect("/");
       console.log(err);
     }
-    // res.render("secrets.ejs");
     res.redirect("/login");
   }
 });
@@ -113,7 +112,14 @@ app.post("/login", passport.authenticate('local',{successRedirect : "/secrets",f
 app.get("/secrets",(req,res)=>{
   if(req.isAuthenticated()){res.render("secrets.ejs");}
   else res.redirect("/");
-  // res.redirect("/");
+});
+
+app.get("/auth/github",passport.authenticate('github'));
+
+app.get("/auth/github/callback",passport.authenticate('github',{
+  failureRedirect : "/login",
+}),(req,res)=>{
+  res.render("secrets.ejs");
 });
 
 app.get("*", (req, res) => res.status(404).send("404 not found"))
@@ -125,6 +131,28 @@ app.listen(port, () => {
 
 passport.use(stratergy);
 
+passport.use('github',new GitHubStrategy({
+  clientID: process.env.clientID,
+  clientSecret: process.env.clientSecret,
+  callbackURL: "http://localhost:3000/auth/github/callback"
+},
+async function(accessToken, refreshToken, profile, cb) {
+  try{
+    console.log(profile);
+    const result=await pgPool.query("select * from usersh where username=$1",[profile.username]);
+    if(result.rows.length==0){
+      let data=await pgPool.query("insert into usersh(username,password_hash) values($1,$2)",[profile.username,"github"]);
+      cb(null,data.rows[0]);
+    }else{
+      cb(null,result.rows[0]);
+    }
+  }
+  catch(err){
+    cb(err,false);
+  }
+}
+));
+
 app.use(
   function (err, req, res, next) {
     if (res.headersSent) {
@@ -133,7 +161,6 @@ app.use(
     console.log(err);
     res.status(500);
     res.send("something wrong");
-    // res.render('error', { error: err })
   }
 );
 
