@@ -32,19 +32,19 @@ const pool = new pg.Pool(
   db.connect();
 const stratergy = new Stratergy(
   async function(username,password,done){
-      try{
-        const results=await pool.query("select * from usersh where username=$1",[username]);
-        const user=results.rows[0];
-        if(results.rows.length===0) done(null,false);
-        if(await bcrypt.compare(password,user.password_hash)){
-          done(null,user);
-        }else{
-          done(null,false);
-        }
-      }catch(err){
-        done(err);
+    try{
+      const results=await pool.query("select * from usersh where username=$1",[username]);
+      const user=results.rows[0];
+      if(results.rows.length===0) return done(null,false);
+      if(await bcrypt.compare(password,user.password_hash)){
+        return done(null,user);
+      }else{
+        return done(null,false);
       }
+    }catch(err){
+      return done(err);
     }
+  }
 );
 
 const app = express();
