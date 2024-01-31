@@ -118,9 +118,8 @@ app.get("/auth/github",passport.authenticate('github'));
 
 app.get("/auth/github/callback",passport.authenticate('github',{
   failureRedirect : "/login",
-}),(req,res)=>{
-  res.render("secrets.ejs");
-});
+  successRedirect : "/secrets"
+}));
 
 app.get("*", (req, res) => res.status(404).send("404 not found"))
 
